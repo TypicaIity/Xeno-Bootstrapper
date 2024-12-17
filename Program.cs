@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using System.IO.Compression;
 using System.IO;
@@ -6,14 +6,16 @@ using System.Net;
 using System.Net.Http;
 using System;
 using System.Diagnostics;
+using System.Runtime.Versioning;
 
 namespace Bootstrapper {
+	[SupportedOSPlatform("windows")]
 	internal class Program {
 		static string latestVersion = "";
 		static string downloadUrl = "";
 		static string currentVersion = "0.0.0";
 
-		static bool CheckVersion() {
+		static private bool CheckVersion() {
 			try {
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
@@ -39,6 +41,50 @@ namespace Bootstrapper {
 			} catch {
 				Console.WriteLine("[!] Failed to fetch latest version! (1)");
 				return false;
+			}
+		}
+
+		private static bool RegistryKeyExists(string key) {
+			try {
+				using (var registryKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(key))
+					return registryKey != null;
+			} catch {
+				return false;
+			}
+		}
+
+		private static void RunInstaller(string installerPath) {
+			var processStartInfo = new ProcessStartInfo {
+				FileName = installerPath,
+				Arguments = "/quiet /norestart",
+				UseShellExecute = true
+			};
+			Process.Start(processStartInfo);
+		}
+
+		public static void CheckDependencies() {
+			if (!RegistryKeyExists(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64")) {
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.WriteLine("[!] Visual C++ Redistributable not found. Downloading and installing...");
+				string vcInstaller = Path.Combine(Path.GetTempPath(), "vc_redist.x64.exe");
+				Task.Run(async () => {
+					var content = await new HttpClient().GetByteArrayAsync("https://aka.ms/vs/17/release/vc_redist.x64.exe");
+					File.WriteAllBytes(vcInstaller, content);
+				}).Wait();
+				RunInstaller(vcInstaller);
+			}
+
+			Thread.Sleep(100);
+
+			if (!RegistryKeyExists(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full")) {
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.WriteLine("[!] .NET Runtime not found. Downloading and installing...");
+				string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
+				Task.Run(async () => {
+					var content = await new HttpClient().GetByteArrayAsync("https://dotnet.microsoft.com/download/dotnet-framework");
+					File.WriteAllBytes(netInstaller, content);
+				}).Wait();
+				RunInstaller(netInstaller);
 			}
 		}
 
@@ -86,6 +132,11 @@ namespace Bootstrapper {
 
 			Console.WriteLine("[-] Checking version...");
 			Thread.Sleep(100);
+
+			Console.WriteLine("[-] Checking dependencies...");
+			Thread.Sleep(100);
+
+			CheckDependencies();
 
 			if (!CheckVersion()) {
 				Console.WriteLine("[+] Xeno is updated! Downloading latest version...");
