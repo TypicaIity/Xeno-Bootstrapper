@@ -74,7 +74,26 @@ namespace Bootstrapper {
 			}
 		}
 
-		public static void CheckDependencies() {
+		private static bool IsDotnetInstalled() {
+			try {
+				var psi = new ProcessStartInfo {
+					FileName = "dotnet",
+					Arguments = "--version",
+					RedirectStandardOutput = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
+				using (var process = Process.Start(psi)) {
+					process?.WaitForExit();
+					return process?.ExitCode == 0;
+				}
+			}
+			catch {
+				return false;
+			}
+		}
+
+		private static void CheckDependencies() {
 			if (!RegistryKeyExists(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64")) {
 				Console.ForegroundColor = ConsoleColor.Yellow;
 				Console.WriteLine("[!] Visual C++ Redistributable not found. Downloading and installing...");
@@ -95,39 +114,55 @@ namespace Bootstrapper {
 
 			Thread.Sleep(100);
 
+			if (!IsDotnetInstalled()) {
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine("[!] The .NET CLI is not installed. Downloading and installing...");
+				string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
+				Task.Run(async () => {
+					var content = await new HttpClient().GetByteArrayAsync("https://go.microsoft.com/fwlink/?linkid=2088631");
+					File.WriteAllBytes(netInstaller, content);
+				}).Wait();
 
-			ProcessStartInfo psi = new ProcessStartInfo {
-				FileName = "dotnet",
-				Arguments = "--list-runtimes",
-				RedirectStandardOutput = true,
-				UseShellExecute = false,
-				CreateNoWindow = true
-			};
+				var processStartInfo = new ProcessStartInfo {
+					FileName = netInstaller,
+					Arguments = "/quiet /norestart",
+					UseShellExecute = true
+				};
+				Process.Start(processStartInfo)!.WaitForExit();
+			} else {
+				var psi = new ProcessStartInfo {
+					FileName = "dotnet",
+					Arguments = "--list-runtimes",
+					RedirectStandardOutput = true,
+					UseShellExecute = false,
+					CreateNoWindow = true
+				};
 
-			using (var process = Process.Start(psi)!) {
-				using (var reader = process.StandardOutput) {
-					if (!reader.ReadToEnd().Contains("Microsoft.NETCore.App 8.")) {
-						Console.ForegroundColor = ConsoleColor.Yellow;
-						Console.WriteLine("[!] .NET Runtime not found. Downloading and installing...");
+				using (var process = Process.Start(psi)!) {
+					using (var reader = process.StandardOutput) {
+						if (!reader.ReadToEnd().Contains("Microsoft.NETCore.App 8.")) {
+							Console.ForegroundColor = ConsoleColor.Yellow;
+							Console.WriteLine("[!] .NET Runtime not found. Downloading and installing...");
 
-						string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
-						Task.Run(async () => {
-							var content = await new HttpClient().GetByteArrayAsync("https://go.microsoft.com/fwlink/?linkid=2088631");
-							File.WriteAllBytes(netInstaller, content);
-						}).Wait();
+							string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
+							Task.Run(async () => {
+								var content = await new HttpClient().GetByteArrayAsync("https://go.microsoft.com/fwlink/?linkid=2088631");
+								File.WriteAllBytes(netInstaller, content);
+							}).Wait();
 
-						var processStartInfo = new ProcessStartInfo {
-							FileName = netInstaller,
-							Arguments = "/quiet /norestart",
-							UseShellExecute = true
-						};
-						Process.Start(processStartInfo)!.WaitForExit();
+							var processStartInfo = new ProcessStartInfo {
+								FileName = netInstaller,
+								Arguments = "/quiet /norestart",
+								UseShellExecute = true
+							};
+							Process.Start(processStartInfo)!.WaitForExit();
+						}
 					}
 				}
 			}
 		}
 
-		public static void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs) {
+		private static void DirectoryCopy(string sourceDirName, string destDirName, bool copySubDirs) {
 			DirectoryInfo dir = new DirectoryInfo(sourceDirName);
 
 			if (!dir.Exists) {
@@ -153,7 +188,7 @@ namespace Bootstrapper {
 			}
 		}
 
-		static void Main() {
+		public static void Main() {
 			Console.ForegroundColor = ConsoleColor.Cyan;
 			Console.WriteLine("[*] discord.gg/getxeno | Bootstrapper by .nyc2");
 
@@ -184,6 +219,7 @@ namespace Bootstrapper {
 			Thread.Sleep(100);
 
 			if (!CheckVersion()) {
+				Console.ForegroundColor = ConsoleColor.Green;
 				Console.WriteLine("[+] Xeno is updated! Downloading latest version...");
 				Thread.Sleep(100);
 
@@ -196,7 +232,7 @@ namespace Bootstrapper {
 					using (var fs = new FileStream(programData + "Xeno-v" + latestVersion + "-x64.zip", FileMode.CreateNew)) {
 						res.Result.Content.CopyToAsync(fs);
 
-						Console.ForegroundColor = ConsoleColor.Cyan;
+						Console.ForegroundColor = ConsoleColor.Green;
 						Console.WriteLine("[+] Extracting...");
 						Thread.Sleep(100);
 
@@ -212,7 +248,7 @@ namespace Bootstrapper {
 					string newScriptsFolder = Path.Combine(newXenoFolder, "scripts");
 
 					if (Directory.Exists(oldScriptsFolder)) {
-						Console.ForegroundColor = ConsoleColor.Cyan;
+						Console.ForegroundColor = ConsoleColor.Green;
 						Console.WriteLine("[+] Copying 'scripts' folder...");
 						DirectoryCopy(oldScriptsFolder, newScriptsFolder, true);
 					} else {
