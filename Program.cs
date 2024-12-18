@@ -50,7 +50,7 @@ namespace Bootstrapper {
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
 
-					var task = Task.Run(() => client.GetAsync("https://nyc-2.github.io/endpoints/xbootstrapper.json"));
+					var task = Task.Run(() => client.GetAsync("https://typicaiity.github.io/endpoints/xbootstrapper.json"));
 					task.Wait();
 
 					JObject json = JObject.Parse(task.Result.Content.ReadAsStringAsync().Result);
@@ -190,7 +190,7 @@ namespace Bootstrapper {
 
 		public static void Main() {
 			Console.ForegroundColor = ConsoleColor.Cyan;
-			Console.WriteLine("[*] discord.gg/getxeno | Bootstrapper by .nyc2");
+			Console.WriteLine("[*] discord.gg/getxeno");
 
 			var programData = "C:\\ProgramData\\Xeno Bootstrapper\\";
 			Directory.CreateDirectory(programData);
@@ -229,7 +229,7 @@ namespace Bootstrapper {
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
 
-					var res = Task.Run(() => client.GetAsync("https://github.com/nyc-2/silly-bootstrapper/releases/latest/download/Xeno.Bootstrapper.exe"));
+					var res = Task.Run(() => client.GetAsync("https://github.com/TypicaIity/silly-bootstrapper/releases/latest/download/Xeno.Bootstrapper.exe"));
 					res.Wait();
 
 					using (var fs = new FileStream(newExePath, FileMode.CreateNew)) {
