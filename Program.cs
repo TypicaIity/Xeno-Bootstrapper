@@ -34,12 +34,16 @@ namespace Bootstrapper {
 						latestVersion = match.Groups[1].Value;
 						return currentVersion == latestVersion;
 					} else {
-						Console.WriteLine("[!] Failed to fetch version! (2)");
+						Console.ForegroundColor = ConsoleColor.Red;
+						Console.WriteLine("[F] Failed to fetch version! (2)");
+
 						return false;
 					}
 				}
 			} catch {
-				Console.WriteLine("[!] Failed to fetch latest version! (1)");
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine("[F] Failed to fetch version! (1)");
+
 				return false;
 			}
 		}
@@ -53,38 +57,57 @@ namespace Bootstrapper {
 			}
 		}
 
-		private static void RunInstaller(string installerPath) {
-			var processStartInfo = new ProcessStartInfo {
-				FileName = installerPath,
-				Arguments = "/quiet /norestart",
-				UseShellExecute = true
-			};
-			Process.Start(processStartInfo);
-		}
-
 		public static void CheckDependencies() {
 			if (!RegistryKeyExists(@"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64")) {
 				Console.ForegroundColor = ConsoleColor.Yellow;
 				Console.WriteLine("[!] Visual C++ Redistributable not found. Downloading and installing...");
+
 				string vcInstaller = Path.Combine(Path.GetTempPath(), "vc_redist.x64.exe");
 				Task.Run(async () => {
 					var content = await new HttpClient().GetByteArrayAsync("https://aka.ms/vs/17/release/vc_redist.x64.exe");
 					File.WriteAllBytes(vcInstaller, content);
 				}).Wait();
-				RunInstaller(vcInstaller);
+
+				var processStartInfo = new ProcessStartInfo {
+					FileName = vcInstaller,
+					Arguments = "/quiet /norestart",
+					UseShellExecute = true
+				};
+				Process.Start(processStartInfo)!.WaitForExit();
 			}
 
 			Thread.Sleep(100);
 
-			if (!RegistryKeyExists(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full")) {
-				Console.ForegroundColor = ConsoleColor.Yellow;
-				Console.WriteLine("[!] .NET Runtime not found. Downloading and installing...");
-				string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
-				Task.Run(async () => {
-					var content = await new HttpClient().GetByteArrayAsync("https://dotnet.microsoft.com/download/dotnet-framework");
-					File.WriteAllBytes(netInstaller, content);
-				}).Wait();
-				RunInstaller(netInstaller);
+
+			ProcessStartInfo psi = new ProcessStartInfo {
+				FileName = "dotnet",
+				Arguments = "--list-runtimes",
+				RedirectStandardOutput = true,
+				UseShellExecute = false,
+				CreateNoWindow = true
+			};
+
+			using (var process = Process.Start(psi)!) {
+				using (var reader = process.StandardOutput) {
+					if (!reader.ReadToEnd().Contains("Microsoft.NETCore.App 8.")) {
+						Console.ForegroundColor = ConsoleColor.Yellow;
+						Console.WriteLine("[!] .NET Runtime not found. Downloading and installing...");
+
+						string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
+						Task.Run(async () => {
+							var content = await new HttpClient().GetByteArrayAsync("https://go.microsoft.com/fwlink/?linkid=2088631");
+							File.WriteAllBytes(netInstaller, content);
+						}).Wait();
+
+						var processStartInfo = new ProcessStartInfo
+						{
+							FileName = netInstaller,
+							Arguments = "/quiet /norestart",
+							UseShellExecute = true
+						};
+						Process.Start(processStartInfo)!.WaitForExit();
+					}
+				}
 			}
 		}
 
@@ -115,14 +138,14 @@ namespace Bootstrapper {
 		}
 
 		static void Main() {
-			Console.ForegroundColor = ConsoleColor.Yellow;
-			Console.WriteLine("[-] discord.gg/getxeno | Bootstrapper by .nyc2");
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.WriteLine("[*] discord.gg/getxeno | Bootstrapper by .nyc2");
 
 			var programData = "C:\\ProgramData\\Xeno Bootstrapper\\";
 			Directory.CreateDirectory(programData);
 
-			Console.ForegroundColor = ConsoleColor.Cyan;
-			Console.WriteLine("[-] Saving current version...");
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine("[~] Saving current version...");
 			Thread.Sleep(100);
 
 			if (File.Exists(programData + "CurrentVersion"))
@@ -130,13 +153,14 @@ namespace Bootstrapper {
 			else
 				File.WriteAllText(programData + "CurrentVersion", currentVersion);
 
-			Console.WriteLine("[-] Checking version...");
-			Thread.Sleep(100);
-
-			Console.WriteLine("[-] Checking dependencies...");
+			Console.WriteLine("[~] Checking dependencies...");
 			Thread.Sleep(100);
 
 			CheckDependencies();
+
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.WriteLine("[~] Checking version...");
+			Thread.Sleep(100);
 
 			if (!CheckVersion()) {
 				Console.WriteLine("[+] Xeno is updated! Downloading latest version...");
@@ -188,8 +212,8 @@ namespace Bootstrapper {
 				}
 			}
 
-			Console.ForegroundColor = ConsoleColor.Cyan;
-			Console.WriteLine("[+] Starting Xeno...");
+			Console.ForegroundColor = ConsoleColor.Blue;
+			Console.WriteLine("[>] Starting Xeno...");
 			Thread.Sleep(100);
 
 			Process.Start(programData + "Xeno-v" + currentVersion + "-x64\\Xeno.exe");
