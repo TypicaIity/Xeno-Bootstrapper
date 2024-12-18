@@ -10,7 +10,7 @@ namespace Bootstrapper {
 		static string latestVersion = "";
 		static string downloadUrl = "";
 		static string currentVersion = "0.0.0";
-		static string bootstrapperVersion = "v3";
+		static string bootstrapperVersion = "v2";
 
 		private static bool CheckVersion() {
 			try {
@@ -209,6 +209,51 @@ namespace Bootstrapper {
 			else
 				File.WriteAllText(programData + "BootstrapperVersion", bootstrapperVersion);
 
+			Console.ForegroundColor = ConsoleColor.DarkGray;
+			Console.WriteLine("[~] Checking bootstrapper version...");
+			Thread.Sleep(100);
+
+			string[] versionInfo = GetBootstrapperVersion();
+
+			if (versionInfo[0] != bootstrapperVersion) {
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine($"[!] A new bootstrapper version is available! ({bootstrapperVersion} -> {versionInfo[0]})");
+				Thread.Sleep(100);
+				Console.WriteLine($"      Changelog:\n{versionInfo[1]}");
+
+				string currentPath = AppContext.BaseDirectory;
+				string exeName = AppDomain.CurrentDomain.FriendlyName;
+				string currentExePath = Path.Combine(currentPath, exeName);
+				string newExePath = currentExePath + ".new";
+
+				using (var client = new HttpClient()) {
+					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
+
+					var res = Task.Run(() => client.GetAsync("https://github.com/nyc-2/silly-bootstrapper/releases/latest/download/Xeno.Bootstrapper.exe"));
+					res.Wait();
+
+					using (var fs = new FileStream(newExePath, FileMode.CreateNew)) {
+						res.Result.Content.CopyToAsync(fs).Wait();
+					}
+				}
+
+				try {
+					File.Move(newExePath, currentExePath, true);
+
+					bootstrapperVersion = versionInfo[0];
+					File.WriteAllText(programData + "BootstrapperVersion", bootstrapperVersion);
+
+					Process.Start(new ProcessStartInfo { FileName = currentExePath, UseShellExecute = true });
+					Environment.Exit(0);
+				} catch (Exception ex) {
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.WriteLine($"[F] Update failed: {ex.Message}");
+					if (File.Exists(newExePath)) File.Delete(newExePath);
+
+					Environment.Exit(1);
+				}
+			}
+
 			Console.WriteLine("[~] Checking dependencies...");
 			Thread.Sleep(100);
 
@@ -264,54 +309,14 @@ namespace Bootstrapper {
 					}
 
 					Thread.Sleep(100);
+
 					File.Delete(programData + "Xeno-v" + latestVersion + "-x64.zip");
 
 					currentVersion = latestVersion;
 					File.WriteAllText(programData + "CurrentVersion", currentVersion);
+
+					Thread.Sleep(100);
 				}
-			}
-
-			Console.ForegroundColor = ConsoleColor.DarkGray;
-			Console.WriteLine("[~] Checking bootstrapper version...");
-			Thread.Sleep(100);
-
-			string[] versionInfo = GetBootstrapperVersion();
-
-			if (versionInfo[0] != bootstrapperVersion) {
-				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine("[!] A new bootstrapper version is available!");
-				Thread.Sleep(100);
-				Console.WriteLine($"      Changelog:\n{versionInfo[1]}");
-
-				string currentPath = AppContext.BaseDirectory;
-				string exeName = AppDomain.CurrentDomain.FriendlyName;
-				string currentExePath = Path.Combine(currentPath, exeName);
-				string newExePath = currentExePath + ".new";
-
-				using (var client = new HttpClient()) {
-					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
-
-					var res = Task.Run(() => client.GetAsync(downloadUrl));
-					res.Wait();
-
-					using (var fs = new FileStream(newExePath, FileMode.CreateNew)) {
-						res.Result.Content.CopyToAsync(fs).Wait();
-					}
-				}
-
-				try {
-					File.Move(newExePath, currentExePath, true);
-
-					Process.Start(new ProcessStartInfo { FileName = currentExePath, UseShellExecute = true });
-					Environment.Exit(0);
-				} catch (Exception ex) {
-					Console.ForegroundColor = ConsoleColor.Red;
-					Console.WriteLine($"[F] Update failed: {ex.Message}");
-					if (File.Exists(newExePath)) File.Delete(newExePath);
-					Environment.Exit(1);
-				}
-
-				Thread.Sleep(100);
 			}
 
 			Console.ForegroundColor = ConsoleColor.Blue;
