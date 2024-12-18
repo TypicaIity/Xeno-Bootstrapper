@@ -1,12 +1,8 @@
-using System.Text.RegularExpressions;
+using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using System.IO.Compression;
-using System.IO;
-using System.Net;
-using System.Net.Http;
-using System;
-using System.Diagnostics;
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 
 namespace Bootstrapper {
 	[SupportedOSPlatform("windows")]
@@ -14,8 +10,9 @@ namespace Bootstrapper {
 		static string latestVersion = "";
 		static string downloadUrl = "";
 		static string currentVersion = "0.0.0";
+		static string bootstrapperVersion = "v3";
 
-		static private bool CheckVersion() {
+		private static bool CheckVersion() {
 			try {
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
@@ -45,6 +42,26 @@ namespace Bootstrapper {
 				Console.WriteLine("[F] Failed to fetch version! (1)");
 
 				return false;
+			}
+		}
+
+		private static string[] GetBootstrapperVersion() { 
+			try {
+				using (var client = new HttpClient()) {
+					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
+
+					var task = Task.Run(() => client.GetAsync("https://nyc-2.github.io/endpoints/xbootstrapper.json"));
+					task.Wait();
+
+					JObject json = JObject.Parse(task.Result.Content.ReadAsStringAsync().Result);
+
+					return [(string)json["latest"]!, (string)json["changelog"]!];
+				}
+			} catch (Exception e) {
+				Console.ForegroundColor = ConsoleColor.Red;
+				Console.WriteLine($"[F] Failed to fetch version: {e.Message}");
+
+				return [bootstrapperVersion, ""];
 			}
 		}
 
@@ -99,8 +116,7 @@ namespace Bootstrapper {
 							File.WriteAllBytes(netInstaller, content);
 						}).Wait();
 
-						var processStartInfo = new ProcessStartInfo
-						{
+						var processStartInfo = new ProcessStartInfo {
 							FileName = netInstaller,
 							Arguments = "/quiet /norestart",
 							UseShellExecute = true
@@ -144,7 +160,7 @@ namespace Bootstrapper {
 			var programData = "C:\\ProgramData\\Xeno Bootstrapper\\";
 			Directory.CreateDirectory(programData);
 
-			Console.ForegroundColor = ConsoleColor.Green;
+			Console.ForegroundColor = ConsoleColor.DarkGray;
 			Console.WriteLine("[~] Saving current version...");
 			Thread.Sleep(100);
 
@@ -153,12 +169,17 @@ namespace Bootstrapper {
 			else
 				File.WriteAllText(programData + "CurrentVersion", currentVersion);
 
+			if (File.Exists(programData + "BootstrapperVersion"))
+				bootstrapperVersion = File.ReadAllText(programData + "BootstrapperVersion").Trim();
+			else
+				File.WriteAllText(programData + "BootstrapperVersion", bootstrapperVersion);
+
 			Console.WriteLine("[~] Checking dependencies...");
 			Thread.Sleep(100);
 
 			CheckDependencies();
 
-			Console.ForegroundColor = ConsoleColor.Green;
+			Console.ForegroundColor = ConsoleColor.DarkGray;
 			Console.WriteLine("[~] Checking version...");
 			Thread.Sleep(100);
 
@@ -180,6 +201,8 @@ namespace Bootstrapper {
 						Thread.Sleep(100);
 
 						ZipFile.ExtractToDirectory(fs, programData, true);
+
+						fs.Close();
 					}
 
 					string oldXenoFolder = programData + "Xeno-v" + currentVersion + "-x64\\";
@@ -212,13 +235,56 @@ namespace Bootstrapper {
 				}
 			}
 
+			Console.ForegroundColor = ConsoleColor.DarkGray;
+			Console.WriteLine("[~] Checking bootstrapper version...");
+			Thread.Sleep(100);
+
+			string[] versionInfo = GetBootstrapperVersion();
+
+			if (versionInfo[0] != bootstrapperVersion) {
+				Console.ForegroundColor = ConsoleColor.Green;
+				Console.WriteLine("[!] A new bootstrapper version is available!");
+				Thread.Sleep(100);
+				Console.WriteLine($"      Changelog:\n{versionInfo[1]}");
+
+				string currentPath = AppContext.BaseDirectory;
+				string exeName = AppDomain.CurrentDomain.FriendlyName;
+				string currentExePath = Path.Combine(currentPath, exeName);
+				string newExePath = currentExePath + ".new";
+
+				using (var client = new HttpClient()) {
+					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
+
+					var res = Task.Run(() => client.GetAsync(downloadUrl));
+					res.Wait();
+
+					using (var fs = new FileStream(newExePath, FileMode.CreateNew)) {
+						res.Result.Content.CopyToAsync(fs).Wait();
+					}
+				}
+
+				try {
+					File.Move(newExePath, currentExePath, true);
+
+					Process.Start(new ProcessStartInfo { FileName = currentExePath, UseShellExecute = true });
+					Environment.Exit(0);
+				} catch (Exception ex) {
+					Console.ForegroundColor = ConsoleColor.Red;
+					Console.WriteLine($"[F] Update failed: {ex.Message}");
+					if (File.Exists(newExePath)) File.Delete(newExePath);
+					Environment.Exit(1);
+				}
+
+				Thread.Sleep(100);
+			}
+
 			Console.ForegroundColor = ConsoleColor.Blue;
 			Console.WriteLine("[>] Starting Xeno...");
 			Thread.Sleep(100);
 
 			Process.Start(programData + "Xeno-v" + currentVersion + "-x64\\Xeno.exe");
 
-			Console.ForegroundColor = ConsoleColor.Gray;
+			Console.ResetColor();
 			Thread.Sleep(500);
 		}
 	}
