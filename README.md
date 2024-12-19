@@ -6,6 +6,7 @@ The **Xeno Bootstrapper** is a utility designed to assist in the installation an
 - **Dependency Management**: Automatically checks and installs missing dependencies required (Microsoft Visual C++ Redistributable and .NET 8.0 Runtime).
 - **Efficient Installation**: Minimizes the number of steps required to get **Xeno** up and running on your machine.
 - **Automatic Updates**: Automatically checks for bootstrapper and **Xeno** updates and installs them.
+- **Saving across versions**: Scripts, tabs and settings will save across versions.    <sub><sup>[BETA]</sup></sub>
 
 ## Installation
 
