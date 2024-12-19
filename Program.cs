@@ -2,14 +2,17 @@ using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using System.IO.Compression;
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 
 namespace Bootstrapper {
 	[SupportedOSPlatform("windows")]
 	internal class Program {
-		static string latestVersion = "";
 		static string downloadUrl = "";
+		static string latestVersion = "";
 		static string currentVersion = "0.0.0";
+		static string programData = "C:\\ProgramData\\" + AppDomain.CurrentDomain.FriendlyName + "\\";
+
 		const string bootstrapperVersion = "v5";
 
 		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -108,8 +111,9 @@ namespace Bootstrapper {
 			Thread.Sleep(100);
 
 			if (!IsDotnetInstalled()) {
-				Console.ForegroundColor = ConsoleColor.Red;
-				Console.WriteLine("[!] The .NET CLI is not installed. Downloading and installing...");
+				Console.ForegroundColor = ConsoleColor.Yellow;
+				Console.WriteLine("[!] The .NET CLI is not installed. (Required to list available runtimes)");
+
 				string netInstaller = Path.Combine(Path.GetTempPath(), "dotnet_installer.exe");
 				Task.Run(async () => {
 					var content = await new HttpClient().GetByteArrayAsync("https://go.microsoft.com/fwlink/?linkid=2088631");
@@ -200,17 +204,16 @@ namespace Bootstrapper {
 			Console.ForegroundColor = ConsoleColor.Cyan;
 			Console.WriteLine("[*] discord.gg/getxeno");
 
-			var programData = "C:\\ProgramData\\Xeno Bootstrapper\\";
 			Directory.CreateDirectory(programData);
 
-			Console.ForegroundColor = ConsoleColor.DarkGray;
-			Console.WriteLine("[~] Saving current version...");
-			Thread.Sleep(100);
+			foreach (var dir in new DirectoryInfo(programData).GetDirectories()) {
+				var match = new Regex(
+					@"Xeno-v(\d+\.\d+\.\d+)-x64"
+				).Match(dir.ToString());
 
-			if (File.Exists(programData + "CurrentVersion"))
-				currentVersion = File.ReadAllText(programData + "CurrentVersion").Trim();
-			else
-				File.WriteAllText(programData + "CurrentVersion", currentVersion);
+				if (match.Success && new Version(match.Groups[1].Value) > new Version(currentVersion))
+					currentVersion = match.Groups[1].Value;
+			}
 
 			Console.ForegroundColor = ConsoleColor.DarkGray;
 			Console.WriteLine("[~] Checking bootstrapper version...");
@@ -292,17 +295,20 @@ namespace Bootstrapper {
 					string oldXenoFolder = programData + "Xeno-v" + currentVersion + "-x64\\";
 					string newXenoFolder = programData + "Xeno-v" + latestVersion + "-x64\\";
 
-					string oldScriptsFolder = Path.Combine(oldXenoFolder, "scripts");
-					string newScriptsFolder = Path.Combine(newXenoFolder, "scripts");
+					void SaveFolder(params string[] path) {
+						string oldFolder = Path.Combine(oldXenoFolder, Path.Combine(path));
+						string newFolder = Path.Combine(newXenoFolder, Path.Combine(path));
 
-					if (Directory.Exists(oldScriptsFolder)) {
-						Console.ForegroundColor = ConsoleColor.Green;
-						Console.WriteLine("[+] Copying 'scripts' folder...");
-						DirectoryCopy(oldScriptsFolder, newScriptsFolder, true);
-					} else {
-						Console.ForegroundColor = ConsoleColor.Red;
-						Console.WriteLine("[!] 'scripts' folder not found in the old Xeno folder.");
+						if (Directory.Exists(oldFolder)) {
+							Console.ForegroundColor = ConsoleColor.Green;
+							Console.WriteLine("[+] Copying 'scripts' folder...");
+							DirectoryCopy(oldFolder, newFolder, true);
+						}
 					}
+
+					SaveFolder("scripts");
+					SaveFolder("bin", "Tabs");
+					File.Copy(Path.Combine(oldXenoFolder, "bin", "settings.json"), Path.Combine(newXenoFolder, "bin", "settings.json"), true);
 
 					if (Directory.Exists(oldXenoFolder)) {
 						Console.ForegroundColor = ConsoleColor.Cyan;
@@ -312,12 +318,7 @@ namespace Bootstrapper {
 					}
 
 					Thread.Sleep(100);
-
 					File.Delete(programData + "Xeno-v" + latestVersion + "-x64.zip");
-
-					currentVersion = latestVersion;
-					File.WriteAllText(programData + "CurrentVersion", currentVersion);
-
 					Thread.Sleep(100);
 				}
 			}
@@ -326,7 +327,7 @@ namespace Bootstrapper {
 			Console.WriteLine("[>] Starting Xeno...");
 			Thread.Sleep(100);
 
-			Process.Start(programData + "Xeno-v" + currentVersion + "-x64\\Xeno.exe");
+			Process.Start(programData + "Xeno-v" + latestVersion + "-x64\\Xeno.exe");
 
 			Console.ResetColor();
 			Thread.Sleep(500);
