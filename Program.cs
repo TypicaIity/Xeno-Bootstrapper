@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Newtonsoft.Json.Linq;
 using System.IO.Compression;
 using System.Runtime.Versioning;
-using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 
 namespace Bootstrapper {
 	[SupportedOSPlatform("windows")]
@@ -10,36 +10,29 @@ namespace Bootstrapper {
 		static string latestVersion = "";
 		static string downloadUrl = "";
 		static string currentVersion = "0.0.0";
-		static string bootstrapperVersion = "v2";
+		const string bootstrapperVersion = "v5";
+
+		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
+		public static extern int MessageBox(IntPtr hwnd, string text, string caption, int type);
 
 		private static bool CheckVersion() {
 			try {
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
 
-					var task = Task.Run(() => client.GetAsync("https://api.github.com/repos/rlz-ve/x/releases/latest"));
-					task.Wait();
+					var res = Task.Run(() => client.GetAsync("https://api.github.com/repos/rlz-ve/x/releases/latest"));
+					res.Wait();
 
-					JObject json = JObject.Parse(task.Result.Content.ReadAsStringAsync().Result);
+					JObject json = JObject.Parse(res.Result.Content.ReadAsStringAsync().Result);
 
 					downloadUrl = (string)json["assets"]![0]!["browser_download_url"]!;
-					Match match = (
-						new Regex(@"https:\/\/github\.com\/rlz-ve\/x\/releases\/download\/.+\/Xeno-v(\d+\.\d+\.\d+)-x64\.zip")
-					).Match(downloadUrl);
 
-					if (match.Success) {
-						latestVersion = match.Groups[1].Value;
-						return currentVersion == latestVersion;
-					} else {
-						Console.ForegroundColor = ConsoleColor.Red;
-						Console.WriteLine("[F] Failed to fetch version! (2)");
-
-						return false;
-					}
+					latestVersion = client.GetAsync("https://raw.githubusercontent.com/rlz-ve/x/refs/heads/main/v").Result.Content.ReadAsStringAsync().Result.Trim();
+					return currentVersion == latestVersion;
 				}
-			} catch {
+			} catch (Exception e) {
 				Console.ForegroundColor = ConsoleColor.Red;
-				Console.WriteLine("[F] Failed to fetch version! (1)");
+				Console.WriteLine($"[F] Failed to fetch version: {e.Message}");
 
 				return false;
 			}
@@ -188,6 +181,21 @@ namespace Bootstrapper {
 			}
 		}
 
+		private static bool CheckRobloxVersion() {
+			using (var client = new HttpClient()) {
+				client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
+
+				var res = Task.Run(() => client.GetAsync("https://clientsettings.roblox.com/v2/client-version/WindowsPlayer"));
+				res.Wait();
+				string robloxVer = (string)JObject.Parse(res.Result.Content.ReadAsStringAsync().Result)["clientVersionUpload"]!;
+
+				res = Task.Run(() => client.GetAsync("https://raw.githubusercontent.com/rlz-ve/x/refs/heads/main/xv"));
+				res.Wait();
+
+				return res.Result.Content.ReadAsStringAsync().Result.Trim() == robloxVer.Trim();
+			}
+		}
+
 		public static void Main() {
 			Console.ForegroundColor = ConsoleColor.Cyan;
 			Console.WriteLine("[*] discord.gg/getxeno");
@@ -204,11 +212,6 @@ namespace Bootstrapper {
 			else
 				File.WriteAllText(programData + "CurrentVersion", currentVersion);
 
-			if (File.Exists(programData + "BootstrapperVersion"))
-				bootstrapperVersion = File.ReadAllText(programData + "BootstrapperVersion").Trim();
-			else
-				File.WriteAllText(programData + "BootstrapperVersion", bootstrapperVersion);
-
 			Console.ForegroundColor = ConsoleColor.DarkGray;
 			Console.WriteLine("[~] Checking bootstrapper version...");
 			Thread.Sleep(100);
@@ -217,43 +220,43 @@ namespace Bootstrapper {
 
 			if (versionInfo[0] != bootstrapperVersion) {
 				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine($"[!] A new bootstrapper version is available! ({bootstrapperVersion} -> {versionInfo[0]})");
-				Thread.Sleep(100);
+				Console.WriteLine($"[!] The bootstrapper is updated! ({bootstrapperVersion} -> {versionInfo[0]})");
 				Console.WriteLine($"      Changelog:\n{versionInfo[1]}");
 
-				string currentPath = AppContext.BaseDirectory;
-				string exeName = AppDomain.CurrentDomain.FriendlyName;
-				string currentExePath = Path.Combine(currentPath, exeName);
-				string newExePath = currentExePath + ".new";
-
+				string newPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppDomain.CurrentDomain.FriendlyName + "-" + versionInfo[0] + ".exe");
 				using (var client = new HttpClient()) {
 					client.DefaultRequestHeaders.Add("User-Agent", "win-x64 .NET 8.0 Application 'Xeno Bootstrapper'");
 
-					var res = Task.Run(() => client.GetAsync("https://github.com/TypicaIity/silly-bootstrapper/releases/latest/download/Xeno.Bootstrapper.exe"));
-					res.Wait();
-
-					using (var fs = new FileStream(newExePath, FileMode.CreateNew)) {
-						res.Result.Content.CopyToAsync(fs).Wait();
+					File.Delete(newPath);
+					using (var fs = new FileStream(newPath, FileMode.CreateNew)) {
+						var res = Task.Run(() => client.GetAsync("https://github.com/TypicaIity/Xeno-Bootstrapper/releases/latest/download/Xeno.Bootstrapper.exe"));
+						res.Wait();
+						res.Result.Content.CopyToAsync(fs);
 					}
 				}
 
-				try {
-					File.Move(newExePath, currentExePath, true);
+				Process.Start(new ProcessStartInfo {
+					FileName = newPath,
+					UseShellExecute = true,
+					CreateNoWindow = false
+				});
 
-					bootstrapperVersion = versionInfo[0];
-					File.WriteAllText(programData + "BootstrapperVersion", bootstrapperVersion);
-
-					Process.Start(new ProcessStartInfo { FileName = currentExePath, UseShellExecute = true });
-					Environment.Exit(0);
-				} catch (Exception ex) {
-					Console.ForegroundColor = ConsoleColor.Red;
-					Console.WriteLine($"[F] Update failed: {ex.Message}");
-					if (File.Exists(newExePath)) File.Delete(newExePath);
-
-					Environment.Exit(1);
-				}
+				Console.ForegroundColor = ConsoleColor.Blue;
+				Console.WriteLine("[>] Running new bootstrapper...");
+				Environment.Exit(0);
 			}
 
+			Console.ForegroundColor = ConsoleColor.DarkGray;
+			Console.WriteLine("[~] Checking Roblox version...");
+			Thread.Sleep(100);
+
+			if (!CheckRobloxVersion()) {
+				int choice = MessageBox(IntPtr.Zero, "  Xeno might not be updated to the latest Roblox version.\n\n  Do you want to exit?.", "Warning", 0x04 | 0x30);
+				if (choice == 6)
+					Environment.Exit(0);
+			}
+
+			Console.ForegroundColor = ConsoleColor.DarkGray;
 			Console.WriteLine("[~] Checking dependencies...");
 			Thread.Sleep(100);
 
@@ -265,7 +268,7 @@ namespace Bootstrapper {
 
 			if (!CheckVersion()) {
 				Console.ForegroundColor = ConsoleColor.Green;
-				Console.WriteLine("[+] Xeno is updated! Downloading latest version...");
+				Console.WriteLine($"[+] Xeno is updated! ({(currentVersion == "0.0.0" ? "Unknown" : currentVersion)} -> {latestVersion})");
 				Thread.Sleep(100);
 
 				using (var client = new HttpClient()) {
