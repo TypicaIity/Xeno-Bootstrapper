@@ -13,7 +13,7 @@ namespace Bootstrapper {
 		static string currentVersion = "0.0.0";
 		static string programData = "C:\\ProgramData\\" + AppDomain.CurrentDomain.FriendlyName + "\\";
 
-		const string bootstrapperVersion = "v5";
+		const string bootstrapperVersion = "v6";
 
 		[DllImport("user32.dll", CharSet = CharSet.Unicode)]
 		public static extern int MessageBox(IntPtr hwnd, string text, string caption, int type);
